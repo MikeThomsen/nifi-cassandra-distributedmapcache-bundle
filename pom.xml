@@ -103,8 +103,8 @@
 
             <dependency>
                 <groupId>org.apache.nifi</groupId>
-                <artifactId>nifi-elasticsearch-avro-schema-service</artifactId>
-                <version>${nifi.version}</version>
+                <artifactId>nifi-cassandra-distributedmapcache-service</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <dependency>
