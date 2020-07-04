@@ -72,5 +72,9 @@
             <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-distributed-cache-client-service-api</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-cassandra-services-api</artifactId>
+        </dependency>
     </dependencies>
 </project>
