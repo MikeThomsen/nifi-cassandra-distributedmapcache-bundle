@@ -1,6 +1,9 @@
 package org.apache.nifi.controller.cassandra;
 
+import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -15,11 +18,18 @@ import org.apache.nifi.distributed.cache.client.DistributedMapCacheClient;
 import org.apache.nifi.distributed.cache.client.Serializer;
 import org.apache.nifi.processor.util.StandardValidators;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static org.apache.nifi.controller.cassandra.QueryUtils.createDeleteStatement;
+import static org.apache.nifi.controller.cassandra.QueryUtils.createExistsQuery;
+import static org.apache.nifi.controller.cassandra.QueryUtils.createFetchQuery;
+import static org.apache.nifi.controller.cassandra.QueryUtils.createInsertStatement;
 
 @Tags({"map", "cache", "distributed", "cassandra"})
 @CapabilityDescription("Provides a DistributedMapCache client that is based on Apache Cassandra.")
@@ -76,6 +86,10 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
     private Long ttl;
 
     private Session session;
+    private PreparedStatement deleteStatement;
+    private PreparedStatement existsStatement;
+    private PreparedStatement fetchStatement;
+    private PreparedStatement insertStatement;
 
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
@@ -93,11 +107,20 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
         }
 
         session = sessionProviderService.getCassandraSession();
+
+        deleteStatement = session.prepare(createDeleteStatement(keyField, tableName));
+        existsStatement = session.prepare(createExistsQuery(keyField, tableName));
+        fetchStatement = session.prepare(createFetchQuery(keyField, valueField, tableName));
+        insertStatement = session.prepare(createInsertStatement(keyField, valueField, tableName, ttl));
     }
 
     @OnDisabled
     public void onDisabled() {
         session.close();
+        deleteStatement = null;
+        existsStatement = null;
+        fetchStatement = null;
+        insertStatement = null;
     }
 
     @Override
@@ -112,9 +135,17 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
 
     @Override
     public <K> boolean containsKey(K k, Serializer<K> serializer) throws IOException {
-        String query = String.format("");
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        serializer.serialize(k, out);
+        out.close();
 
-        return false;
+        byte[] key = out.toByteArray();
+
+        BoundStatement statement = existsStatement.bind(tableName, key);
+        ResultSet rs =session.execute(statement);
+        Iterator<Row> iterator = rs.iterator();
+
+        return iterator.hasNext();
     }
 
     @Override

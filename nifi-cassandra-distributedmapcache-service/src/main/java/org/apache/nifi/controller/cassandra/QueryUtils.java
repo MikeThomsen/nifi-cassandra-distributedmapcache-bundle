@@ -15,7 +15,7 @@ public class QueryUtils {
         return String.format("SELECT %s FROM %s WHERE %s = ?", valueField, table, keyField);
     }
 
-    public static String createInsertStatement(String keyField, String valueField, String table, Integer ttl) {
+    public static String createInsertStatement(String keyField, String valueField, String table, Long ttl) {
         String retVal = String.format("INSERT INTO %s (%s, %s) VALUES(?, ?)", table, keyField, valueField);
 
         if (ttl != null) {
