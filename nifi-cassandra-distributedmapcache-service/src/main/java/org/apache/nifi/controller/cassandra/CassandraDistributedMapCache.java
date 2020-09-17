@@ -1,7 +1,10 @@
 package org.apache.nifi.controller.cassandra;
 
+import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.Session;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
+import org.apache.nifi.annotation.lifecycle.OnDisabled;
 import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.cassandra.CassandraSessionProviderService;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -72,6 +75,8 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
     private String valueField;
     private Long ttl;
 
+    private Session session;
+
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         return DESCRIPTORS;
@@ -86,6 +91,13 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
         if (context.getProperty(TTL).isSet()) {
             ttl = context.getProperty(TTL).evaluateAttributeExpressions().asTimePeriod(TimeUnit.SECONDS);
         }
+
+        session = sessionProviderService.getCassandraSession();
+    }
+
+    @OnDisabled
+    public void onDisabled() {
+        session.close();
     }
 
     @Override
@@ -100,6 +112,8 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
 
     @Override
     public <K> boolean containsKey(K k, Serializer<K> serializer) throws IOException {
+        String query = String.format("");
+
         return false;
     }
 
