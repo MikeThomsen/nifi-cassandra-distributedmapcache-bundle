@@ -1,5 +1,8 @@
 package org.apache.nifi
 
+import org.apache.nifi.controller.cassandra.CassandraDistributedMapCache
+import org.apache.nifi.distributed.cache.client.Deserializer
+import org.apache.nifi.distributed.cache.client.Serializer
 import org.apache.nifi.processor.AbstractProcessor
 import org.apache.nifi.processor.ProcessContext
 import org.apache.nifi.processor.ProcessSession
@@ -17,6 +20,7 @@ import org.junit.Test
  */
 class CassandraDistributedMapCacheIT {
     TestRunner runner
+    CassandraDistributedMapCache distributedMapCache
 
     @Before
     void setup() {
@@ -26,16 +30,44 @@ class CassandraDistributedMapCacheIT {
 
             }
         })
+        distributedMapCache = new CassandraDistributedMapCache()
+
         def cassandraService = new CassandraSessionProvider()
         runner.addControllerService("provider", cassandraService)
+        runner.addControllerService("dmc", distributedMapCache)
         runner.setProperty(cassandraService, CassandraSessionProvider.CONTACT_POINTS, "localhost:9042")
         runner.setProperty(cassandraService, CassandraSessionProvider.KEYSPACE, "nifi_test")
+        runner.setProperty(distributedMapCache, CassandraDistributedMapCache.SESSION_PROVIDER, "provider")
+        runner.setProperty(distributedMapCache, CassandraDistributedMapCache.TABLE_NAME, "dmc")
+        runner.setProperty(distributedMapCache, CassandraDistributedMapCache.KEY_FIELD_NAME, "id")
+        runner.setProperty(distributedMapCache, CassandraDistributedMapCache.VALUE_FIELD_NAME, "value")
         runner.enableControllerService(cassandraService)
+        runner.enableControllerService(distributedMapCache)
         runner.assertValid()
     }
 
+    Serializer<String> serializer = { str, os ->
+        os.write(str.bytes)
+    } as Serializer
+
+    Deserializer<String> deserializer = { input ->
+        new String(input)
+    } as Deserializer
+
     @Test
     void testContainsKey() {
+        def contains = distributedMapCache.containsKey("row-1", serializer)
+        assert contains
+    }
 
+    @Test
+    void testRemove() {
+        distributedMapCache.remove("row-1", serializer)
+    }
+
+    @Test
+    void testGet() {
+        def result = distributedMapCache.get("row-1", serializer, deserializer)
+        assert result == "test!"
     }
 }

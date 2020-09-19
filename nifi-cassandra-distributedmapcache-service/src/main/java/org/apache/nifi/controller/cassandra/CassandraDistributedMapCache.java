@@ -20,6 +20,7 @@ import org.apache.nifi.processor.util.StandardValidators;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -124,24 +125,30 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
     }
 
     @Override
-    public <K, V> boolean putIfAbsent(K k, V v, Serializer<K> serializer, Serializer<V> serializer1) throws IOException {
+    public <K, V> boolean putIfAbsent(K k, V v, Serializer<K> keySerializer, Serializer<V> valueSerializer) throws IOException {
+        boolean contains = containsKey(k, keySerializer);
+
+        if (!contains) {
+            put(k, v, keySerializer, valueSerializer);
+        }
+
         return false;
     }
 
     @Override
-    public <K, V> V getAndPutIfAbsent(K k, V v, Serializer<K> serializer, Serializer<V> serializer1, Deserializer<V> deserializer) throws IOException {
+    public <K, V> V getAndPutIfAbsent(K k, V v, Serializer<K> keySerializer, Serializer<V> valueSerializer, Deserializer<V> deserializer) throws IOException {
+        boolean contains = containsKey(k, keySerializer);
+
         return null;
     }
 
     @Override
     public <K> boolean containsKey(K k, Serializer<K> serializer) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        serializer.serialize(k, out);
-        out.close();
+        byte[] key = serializeKey(k, serializer);
 
-        byte[] key = out.toByteArray();
-
-        BoundStatement statement = existsStatement.bind(tableName, key);
+        BoundStatement statement = existsStatement.bind();
+        ByteBuffer buffer = ByteBuffer.wrap(key);
+        statement.setBytes(0, buffer);
         ResultSet rs =session.execute(statement);
         Iterator<Row> iterator = rs.iterator();
 
@@ -149,27 +156,64 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
     }
 
     @Override
-    public <K, V> void put(K k, V v, Serializer<K> serializer, Serializer<V> serializer1) throws IOException {
-
+    public <K, V> void put(K k, V v, Serializer<K> keySerializer, Serializer<V> valueSerializer) throws IOException {
+        BoundStatement statement = insertStatement.bind();
+        statement.setBytes(0, ByteBuffer.wrap(serializeKey(k, keySerializer)));
+        statement.setBytes(1, ByteBuffer.wrap(serializeValue(v, valueSerializer)));
+        session.execute(statement);
     }
 
     @Override
     public <K, V> V get(K k, Serializer<K> serializer, Deserializer<V> deserializer) throws IOException {
-        return null;
+        BoundStatement boundStatement = fetchStatement.bind();
+        boundStatement.setBytes(0, ByteBuffer.wrap(serializeKey(k, serializer)));
+        ResultSet rs = session.execute(boundStatement);
+        Iterator<Row> iterator = rs.iterator();
+        if (!iterator.hasNext()) {
+            return null;
+        }
+
+        Row fetched = iterator.next();
+        ByteBuffer buffer = fetched.getBytes(valueField);
+
+        byte[] content = buffer.array();
+
+        return deserializer.deserialize(content);
     }
 
     @Override
     public void close() throws IOException {
-
+        session.close();
+        session = null;
     }
 
     @Override
     public <K> boolean remove(K k, Serializer<K> serializer) throws IOException {
-        return false;
+        BoundStatement delete = deleteStatement.bind();
+        delete.setBytes(0, ByteBuffer.wrap(serializeKey(k, serializer)));
+        session.execute(delete);
+
+        return true;
     }
 
     @Override
     public long removeByPattern(String s) throws IOException {
-        return 0;
+        throw new UnsupportedOperationException();
+    }
+
+    private <K> byte[] serializeKey(K k, Serializer<K> keySerializer) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        keySerializer.serialize(k, out);
+        out.close();
+
+        return out.toByteArray();
+    }
+
+    private <V> byte[] serializeValue(V v, Serializer<V> valueSerializer) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        valueSerializer.serialize(v, out);
+        out.close();
+
+        return out.toByteArray();
     }
 }
