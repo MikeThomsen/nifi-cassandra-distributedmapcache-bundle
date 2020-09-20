@@ -43,6 +43,7 @@ class CassandraDistributedMapCacheIT {
         runner.setProperty(distributedMapCache, CassandraDistributedMapCache.TABLE_NAME, "dmc")
         runner.setProperty(distributedMapCache, CassandraDistributedMapCache.KEY_FIELD_NAME, "id")
         runner.setProperty(distributedMapCache, CassandraDistributedMapCache.VALUE_FIELD_NAME, "value")
+        runner.setProperty(distributedMapCache, CassandraDistributedMapCache.TTL, "5 sec")
         runner.enableControllerService(cassandraService)
         runner.enableControllerService(distributedMapCache)
         runner.assertValid()
