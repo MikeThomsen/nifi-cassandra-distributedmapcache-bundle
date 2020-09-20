@@ -20,6 +20,7 @@ import org.apache.nifi.processor.util.StandardValidators;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -126,20 +127,20 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
 
     @Override
     public <K, V> boolean putIfAbsent(K k, V v, Serializer<K> keySerializer, Serializer<V> valueSerializer) throws IOException {
-        boolean contains = containsKey(k, keySerializer);
-
-        if (!contains) {
+        if (containsKey(k, keySerializer)) {
+            return false;
+        } else {
             put(k, v, keySerializer, valueSerializer);
+            return true;
         }
-
-        return false;
     }
 
     @Override
     public <K, V> V getAndPutIfAbsent(K k, V v, Serializer<K> keySerializer, Serializer<V> valueSerializer, Deserializer<V> deserializer) throws IOException {
-        boolean contains = containsKey(k, keySerializer);
+        V got = get(k, keySerializer, deserializer);
+        boolean wasPresent = putIfAbsent(k, v, keySerializer, valueSerializer);
 
-        return null;
+        return wasPresent ? got : null;
     }
 
     @Override
@@ -152,7 +153,13 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
         ResultSet rs =session.execute(statement);
         Iterator<Row> iterator = rs.iterator();
 
-        return iterator.hasNext();
+        if (iterator.hasNext()) {
+            Row row = iterator.next();
+            long value = row.getLong("exist_count");
+            return value > 0;
+        } else {
+            return false;
+        }
     }
 
     @Override

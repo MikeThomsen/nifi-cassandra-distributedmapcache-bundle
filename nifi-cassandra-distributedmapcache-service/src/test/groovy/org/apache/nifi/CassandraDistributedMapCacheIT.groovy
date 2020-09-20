@@ -1,5 +1,6 @@
 package org.apache.nifi
 
+import com.datastax.driver.core.Session
 import org.apache.nifi.controller.cassandra.CassandraDistributedMapCache
 import org.apache.nifi.distributed.cache.client.Deserializer
 import org.apache.nifi.distributed.cache.client.Serializer
@@ -10,20 +11,21 @@ import org.apache.nifi.processor.exception.ProcessException
 import org.apache.nifi.service.CassandraSessionProvider
 import org.apache.nifi.util.TestRunner
 import org.apache.nifi.util.TestRunners
-import org.junit.Before
+import org.junit.AfterClass
+import org.junit.BeforeClass
 import org.junit.Test
-
 /**
  * Setup instructions:
  *
  * docker run -p 7000:7000 -p 9042:9042 --name cassandra --restart always -d cassandra:3
  */
 class CassandraDistributedMapCacheIT {
-    TestRunner runner
-    CassandraDistributedMapCache distributedMapCache
+    static TestRunner runner
+    static CassandraDistributedMapCache distributedMapCache
+    static Session session
 
-    @Before
-    void setup() {
+    @BeforeClass
+    static void setup() {
         runner = TestRunners.newTestRunner(new AbstractProcessor() {
             @Override
             void onTrigger(ProcessContext processContext, ProcessSession processSession) throws ProcessException {
@@ -44,6 +46,19 @@ class CassandraDistributedMapCacheIT {
         runner.enableControllerService(cassandraService)
         runner.enableControllerService(distributedMapCache)
         runner.assertValid()
+
+        session = cassandraService.getCassandraSession();
+        session.execute("""
+            INSERT INTO dmc (id, value) VALUES(textAsBlob('contains-key'), textAsBlob('testvalue'))
+        """)
+        session.execute("""
+            INSERT INTO dmc (id, value) VALUES(textAsBlob('delete-key'), textAsBlob('testvalue'))
+        """)
+    }
+
+    @AfterClass
+    static void cleanup() {
+        session.execute("TRUNCATE dmc")
     }
 
     Serializer<String> serializer = { str, os ->
@@ -56,18 +71,31 @@ class CassandraDistributedMapCacheIT {
 
     @Test
     void testContainsKey() {
-        def contains = distributedMapCache.containsKey("row-1", serializer)
+        def contains = distributedMapCache.containsKey("contains-key", serializer)
         assert contains
     }
 
     @Test
     void testRemove() {
-        distributedMapCache.remove("row-1", serializer)
+        distributedMapCache.remove("delete-key", serializer)
     }
 
     @Test
     void testGet() {
-        def result = distributedMapCache.get("row-1", serializer, deserializer)
-        assert result == "test!"
+        def result = distributedMapCache.get("contains-key", serializer, deserializer)
+        assert result == "testvalue"
+    }
+
+    @Test
+    void testPut() {
+        distributedMapCache.put("put-key", "sometestdata", serializer, serializer)
+        Thread.sleep(1000)
+        assert distributedMapCache.containsKey("put-key", serializer)
+    }
+
+    @Test
+    void testPutIfAbsent() {
+        assert distributedMapCache.putIfAbsent("put-if-absent-key", "testingthis", serializer, serializer)
+        assert !distributedMapCache.putIfAbsent("put-if-absent-key", "testingthis", serializer, serializer)
     }
 }

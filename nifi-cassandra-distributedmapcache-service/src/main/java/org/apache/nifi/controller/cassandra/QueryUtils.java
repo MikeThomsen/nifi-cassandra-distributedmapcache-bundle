@@ -8,7 +8,7 @@ public class QueryUtils {
     }
 
     public static String createExistsQuery(String keyField, String table) {
-        return String.format("SELECT COUNT(*) FROM %s WHERE %s = ?", table, keyField);
+        return String.format("SELECT COUNT(*) as exist_count FROM %s WHERE %s = ?", table, keyField);
     }
 
     public static String createFetchQuery(String keyField, String valueField, String table) {
