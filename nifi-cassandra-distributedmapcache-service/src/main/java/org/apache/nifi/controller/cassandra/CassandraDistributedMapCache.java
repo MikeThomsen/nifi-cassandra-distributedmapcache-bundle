@@ -134,7 +134,7 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
 
     @OnDisabled
     public void onDisabled() {
-        session.close();
+        session = null;
         deleteStatement = null;
         existsStatement = null;
         fetchStatement = null;
@@ -206,8 +206,7 @@ public class CassandraDistributedMapCache extends AbstractControllerService impl
 
     @Override
     public void close() throws IOException {
-        session.close();
-        session = null;
+
     }
 
     @Override
